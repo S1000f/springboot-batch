@@ -1,0 +1,2 @@
+insert into user (idx, email, name, password, social_type, status, grade, created_date, updated_date)
+    values(1001, 'test@gmail.com', 'test1', 'test11', 'KAKAO', 'ACTIVE', 'VIP', '2016-03-01T00:00:00', '2018-03-01T00:00:00');
