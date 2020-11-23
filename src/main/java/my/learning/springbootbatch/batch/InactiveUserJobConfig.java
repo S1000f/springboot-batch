@@ -1,6 +1,7 @@
 package my.learning.springbootbatch.batch;
 
 import lombok.AllArgsConstructor;
+import my.learning.springbootbatch.batch.listener.InactiveJobListener;
 import my.learning.springbootbatch.domain.User;
 import my.learning.springbootbatch.domain.enums.UserStatus;
 import my.learning.springbootbatch.repository.UserRepository;
@@ -14,11 +15,15 @@ import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.support.ListItemReader;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import javax.persistence.EntityManagerFactory;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +38,11 @@ public class InactiveUserJobConfig {
 
     // Job 설정
     @Bean
-    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep) {
+    public Job inactiveUserJob(JobBuilderFactory jobBuilderFactory, Step inactiveJobStep2, InactiveJobListener inactiveJobListener) {
         return jobBuilderFactory.get("inactiveUserJob")
                 .preventRestart()
-                .start(inactiveJobStep)
+                .listener(inactiveJobListener)
+                .start(inactiveJobStep2)
                 .build();
     }
 
@@ -50,6 +56,33 @@ public class InactiveUserJobConfig {
                 .processor(inactiveUserProcessor())
                 .writer(inactiveUserWriter())
                 .build();
+    }
+
+    @Bean
+    public Step inactiveJobStep2(
+            StepBuilderFactory stepBuilderFactory,
+            @Qualifier("inactiveUserReader4") ListItemReader<User> inactiveUserReader
+    ) {
+        return stepBuilderFactory.get("inactiveUserStep2")
+                .<User, User> chunk(CHUNK_SIZE)
+                .reader(inactiveUserReader)
+                .processor(inactiveUserProcessor())
+                .writer(inactiveUserWriter())
+                .build();
+    }
+
+    // JobParameter 을 사용하는 ItemReader 구현체
+    @Bean
+    @StepScope
+    public ListItemReader<User> inactiveUserReader4(
+            @Value("#{jobParameters[now]}")Date nowDate,
+            UserRepository userRepository
+    ) {
+        LocalDateTime now = LocalDateTime.ofInstant(nowDate.toInstant(), ZoneId.systemDefault());
+        List<User> inactiveUsers =
+                userRepository.findByUpdatedDateBeforeAndStatusEquals(now.minusYears(1), UserStatus.ACTIVE);
+
+        return new ListItemReader<>(inactiveUsers);
     }
 
     // ItemReader 구현체 직접구현
@@ -118,6 +151,5 @@ public class InactiveUserJobConfig {
     public ItemWriter<User> inactiveUserWriter() {
         return (List<? extends User> users) -> userRepository.saveAll(users);
     }
-
 
 }
